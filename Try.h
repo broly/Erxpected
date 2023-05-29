@@ -25,11 +25,9 @@
 
 #include "Expected.h"
 
-// Список аргументов функции
 template<typename...>
 struct TFunctionTraits_Args;
 
-// Одна из специлизаций (только для первого аргумента)
 template<typename T0>
 struct TFunctionTraits_Args<T0>
 {
@@ -37,7 +35,6 @@ struct TFunctionTraits_Args<T0>
 };
 
 
-// Шаблонная мета-функция, выдающая информацию о функции
 template <typename T>
 struct TFunctionTraits : public TFunctionTraits<decltype(&T::operator())>
 {};
