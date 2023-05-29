@@ -24,6 +24,7 @@
 #pragma once
 
 #include <set>
+#include <coroutine>
 #include <optional>
 #include "TypeId.h"
 #include "Error.h"
@@ -97,7 +98,6 @@ struct ExpectedBase
 		return (const ErrorType*)ErrHolder->CatchError(ErrorTypeId);
 	}
 
-private:
 	
 	struct ErrorHolderBase
 	{
@@ -138,7 +138,9 @@ private:
 		}
 		virtual std::unique_ptr<ErrorHolderBase> Copy() const override
 		{
-			return std::make_unique<TErrorHolder<ErrorType>>(Error);
+			auto Err = std::make_unique<TErrorHolder<ErrorType>>(Error);
+			Err->SetBases(Bases);
+			return Err;
 		}
 		virtual std::string Handle() const override
 		{
@@ -167,6 +169,8 @@ template<typename T = void>
 struct Expected;
 
 
+
+
 template<>
 struct Expected<void> : public ExpectedBase
 {
@@ -190,6 +194,61 @@ struct Expected<void> : public ExpectedBase
 template<typename T>
 struct Expected : public ExpectedBase
 {
+	struct promise_type
+	{
+		std::suspend_never initial_suspend() noexcept { return {}; }
+		std::suspend_never final_suspend() noexcept { return {}; }
+		void unhandled_exception() noexcept {}
+		Expected<T> get_return_object()
+		{
+			return (Expected<T>)(Expected<T>::HandleType::from_promise(*this));
+		}
+
+		Expected<T>* Exp;
+
+
+		void return_value(Expected<T> InExpected)
+		{
+			if (InExpected.HasValue())
+				Exp->SetValue(InExpected.Value.value());
+			else if (InExpected.HasError())
+				Exp->ErrHolder = InExpected.ErrHolder->Copy();
+		}
+	};
+	using HandleType = std::coroutine_handle<promise_type>;
+
+	bool await_ready()
+	{
+		return !HasError();
+	}
+
+	void await_suspend(std::coroutine_handle<promise_type> Handle)
+	{
+		Handle.promise().Exp->ErrHolder = ErrHolder->Copy();
+		Handle.destroy();
+	}
+
+	Expected<T> await_resume()
+	{
+		return *this;
+	}
+
+	Expected<T> operator=(const Expected<T>& Other)
+	{
+		if (Other.HasError())
+			ErrHolder = Other.ErrHolder->Copy();
+		if (Other.HasValue())
+			SetValue(Other.Unwrap());
+		return *this;
+	}
+
+	HandleType Handle;
+
+	Expected(std::coroutine_handle<promise_type> InHandle)
+	{
+		Handle = InHandle;
+		Handle.promise().Exp = this;
+	}
 
 	Expected(T InValue)
 	{
@@ -210,13 +269,24 @@ struct Expected : public ExpectedBase
 		Value.reset();
 	}
 
+
+	void SetValue(T V)
+	{
+		Value = V;
+	}
+
 	T Unwrap() const
 	{
 		ExpectedBase::Unwrap();
 		return *Value;
 	}
 
-	bool HasValue()
+	T operator*() const
+	{
+		return Unwrap();
+	}
+
+	bool HasValue() const
 	{
 		return Value.has_value();
 	}

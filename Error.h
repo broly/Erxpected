@@ -39,8 +39,8 @@ struct DeriveError : T
 
 		std::set<size_t> Result;
 
-		std::merge(Bases.begin(), OtherBases.end(),
-			Bases.begin(), OtherBases.end(),
+		std::merge(Bases.begin(), Bases.end(),
+			OtherBases.begin(), OtherBases.end(),
 			std::inserter(Result, Result.begin()));
 
 		return Result;

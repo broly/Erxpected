@@ -23,24 +23,84 @@
 
 #include "Erxpected.h"
 #include "Expected.h"
+#include "Try.h"
 
 using namespace std;
 
+#define expect *co_await
+
+
 Expected<int> Ok()
 {
-	return 123;
+	return 1;
 }
 
-Expected<int> Wrong()
+Expected<int> Fail()
 {
-	return Unexpected(ErRuntimeError("Wrong"));
+	co_return Unexpected(ErMathError("m. err"));
+}
+
+Expected<int> MaybeA()
+{
+	int A = co_await Fail();
+	int B = co_await Ok();
+	co_return A + B;
+}
+
+Expected<int> MaybeB()
+{
+	//int Res1 = co_await Ok();
+	//int Res2 = co_await Ok();
+	//int Res3 = co_await MaybeA();
+	//int Res4 = co_await Ok();
+	//co_return Res1 + Res2 + Res3;
+	co_return
+		expect Ok() +
+		expect Ok() +
+		expect MaybeA() +
+		expect Ok();
+}
+
+Expected<int> MonadicWrong_Catch()
+{
+	int Res1 = co_await Ok();
+	int Res2 = co_await Ok();
+	auto Res3 = MaybeA();
+	if (Res3.HasError())
+	{
+		std::cout << "Error occured!\n";
+		co_await Res3;  // rethrow
+	}
+	int Res4 = co_await Ok();
+	co_return Res1 + Res2 + Res3.Unwrap();
+}
+
+
+Expected<int> MonadicOk()
+{
+	int Res1 = co_await Ok();
+	int Res2 = co_await Ok();
+	co_return Res1 + Res2;
 }
 
 int main()
 {
 	int OkValue = Ok();
 
-	Expected<int> WrongExpected = Wrong();
+	Expected<int> WrongExpected = MaybeB();
+
+	auto expected = Try(
+		[&] () -> Expected<int> {
+			return MaybeB();
+		},
+		[&](const ErMathError& Err)
+		{
+			return 12;
+		},
+		[&](const ErRuntimeError& Err)
+		{
+			return 13;
+		});
 
 	if (WrongExpected.HasValue())
 	{
